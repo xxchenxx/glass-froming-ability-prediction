@@ -19,6 +19,7 @@ Z_row_column = pickle.load(open('Z_row_column.txt', 'rb'))
 
 def AT(i):#atomic table representation
     #i='4 La$_{66}$Al$_{14}$Cu$_{10}$Ni$_{10}$ [c][15]'
+    # print(i)
     X= [[[0.0 for ai in range(11)]for aj in range(11)] for ak in range(1) ]
     gfa=re.findall('\[[a-c]?\]',i)[0]
     
@@ -47,6 +48,7 @@ gfa_i=[]
 gfa_a=[]
 gfa_b=[]
 gfa_c=[]
+print(len(gfa_dataset))
 for i in  gfa_dataset:
     tx_gfa=re.findall('\[[a-c]?\]', i)#[B, Fe, P,No]
     gfa_i.extend(tx_gfa)
@@ -64,6 +66,7 @@ gfa_data_form_b=[]
 for i in gfa_a:
     x,y = AT(gfa_dataset[i])
     gfa_data_form=gfa_data_form+x
+    # assert False
     gfa_data_form_b=gfa_data_form_b+y
 for i in gfa_c:
     x,y = AT(gfa_dataset[i])
@@ -76,7 +79,7 @@ for i in gfa_b:
 
 X_all = np.array(gfa_data_form).reshape(-1, 1, 11, 11) 
 Y_all = np_utils.to_categorical(np.array(gfa_data_form_b), num_classes=2)#one-hot coding
-
+print(X_all.shape)
 #write out dataset after process
 pickle.dump([X_all,Y_all],open('dataset_AT.txt', 'wb')) 
 #------------------------------------------------------------------------------
