@@ -34,8 +34,8 @@ Xs=[]
 Ys=[]
 for i in range(len(df)):
     # print(df.iloc[i,11])
-    Xs.append(AT(df.iloc[i, 1:11], df.iloc[i, 11]))
-    Ys.append(df.iloc[i, 12])
+    Xs.append(AT(df.iloc[i, :10], df.iloc[i, 10]))
+    Ys.append(df.iloc[i, -1])
 
 import numpy as np
 Xs = np.array(Xs)
