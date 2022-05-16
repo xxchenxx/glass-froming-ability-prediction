@@ -4,7 +4,7 @@ import re
 import copy
 df = pd.read_csv("low_fidelity.csv", sep="\t")
 [property_name_list,property_list,element_name,_] = pickle.load(open('element_property.txt', 'rb'))
-element = list(df.columns[1:11])
+element = ['Al', 'Cr', 'Hf', 'Mo', 'Nb', 'Ta', 'Ti', 'V', 'W', 'Zr']
 print(element)
 
 Z_row_column = pickle.load(open('Z_row_column.txt', 'rb'))
