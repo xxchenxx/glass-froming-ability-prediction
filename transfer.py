@@ -1,5 +1,4 @@
 import pickle
-from datasets import map_nested
 
 import torch
 import torch.nn as nn
