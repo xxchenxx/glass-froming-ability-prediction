@@ -109,7 +109,7 @@ for seed in range(1):
             Ys = np.concatenate(Ys, 0)
             mse = np.mean((Xs-Ys)**2)
             corr = pearsonr(Xs, Ys)[0]
-            if best_mse < mse:
+            if best_mse > mse:
                 best_mse = mse
                 best_corr = corr
                 best_state_dict = model.state_dict()
