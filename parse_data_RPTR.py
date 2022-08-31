@@ -12,7 +12,7 @@ new_index=[int(i[4]) for i in Z_row_column]
 def AT(x_array, temp):#atomic table representation
     #i='4 La$_{66}$Al$_{14}$Cu$_{10}$Ni$_{10}$ [c][15]'
     print(x_array)
-    X= [[[0.0 for ai in range(18)]for aj in range(9)] for ak in range(1) ]
+    X= [[[0.0 for ai in range(18)]for aj in range(9)] for ak in range(2)]
     # gfa=re.findall('\[[a-c]?\]',i)[0]
     
     tx1_element=[element[i] for i in range(10) if x_array[i] != 0]
@@ -27,7 +27,7 @@ def AT(x_array, temp):#atomic table representation
     # X_BMG=copy.deepcopy(X)
     # X_BMG[0][10][10]=1.0 #processing parameter
     print(temp)
-    X[0][0][8] = (temp - 273.15) / 1000
+    X[1] = [[(temp - 273.15) / 2000 for ai in range(18)]for aj in range(9)]
     return X #[X,X_BMG]
     
 Xs=[]
@@ -42,4 +42,4 @@ Xs = np.array(Xs)
 Ys = np.array(Ys)
 print(Xs.shape)
 print(Ys.shape)
-pickle.dump([Xs, Ys], open('high_data.pkl', "wb"))
+pickle.dump([Xs, Ys], open('high_data_new.pkl', "wb"))

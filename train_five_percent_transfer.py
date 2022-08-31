@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import numpy as np
 from scipy.stats import pearsonr
 import random
+from imblearn.over_sampling import RandomOverSampler
+import smogn
 """
 def CNNmodel_PTR():
     np.random.seed(1)  # for reproducibility
@@ -70,41 +72,69 @@ class Model(nn.Module):
         out = out.view(out.shape[0], -1)
         out = self.fc(out)
         return out
-    
-for seed in range(1):
+import pandas as pd
+for seed in range(10):
     set_seed(seed)
     model = Model()
     model = model.cuda()
-    data = pickle.load(open(f"low_data_split.pkl", "rb"))
+    data = pickle.load(open(f"data_split_5_percent.pkl", "rb"))
+    # y = np.concatenate([data['train_labels'], data['test_labels']], 0)
+    # X = np.concatenate([data['train_Xs'], data['test_Xs']], 0)
     y = data['train_labels']
     new_y = (y*2).astype(int)
-    new_y[new_y > 4] = 4
-    new_test_y = (data['test_labels'] * 2).astype(int)
-    new_test_y[new_test_y > 4] = 4
-    train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['train_Xs']).float(), torch.from_numpy(new_y).long())
-    test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['test_Xs']).float(), torch.from_numpy(new_test_y).long())
+    X = data['train_Xs']
+    upsample = True
+    if upsample:
+        ros = RandomOverSampler(random_state=0)
+        X = X.reshape(X.shape[0], -1)
+        # print(X.shape)
+        # print(y.reshape(-1,1).shape)
+        X = np.concatenate([X, y.reshape(-1,1)], 1)
+        X_resampled, y_resampled = ros.fit_resample(X, new_y)
+        print(X_resampled.shape)
+        y_original = X_resampled[:, -1]
+        print(y_resampled)
+        X_original = X_resampled[:, :-1].reshape(-1, *data['train_Xs'].shape[1:])
+    else:
+        X_original = X
+        y_resampled = new_y
 
-    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=16)
-    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=16)
+    train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(X_original).float(), torch.from_numpy(y_resampled).long())
+    fake_test_label = (data['test_labels'] * 2).astype(int)
+    test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['test_Xs']).float(), torch.from_numpy(fake_test_label).long())
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-6)
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=4, shuffle=True)
+    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=4)
 
-    best_mse = 100000
-    best_corr = 0
-    best_accuracy = 0
-    for epoch in range(10):
+    optimizer = torch.optim.SGD([
+                {'params': [p for name, p in model.named_parameters() if 'mask' not in name], "lr": 0.001, 'weight_decay': 0},
+                {'params': [p for name, p in model.named_parameters() if 'mask' in name], "lr": 10, 'weight_decay': 0}
+            ])
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+
+    best_acc = 0
+    print(len(fake_test_label))
+    model.load_state_dict(torch.load("low_pretrained.pkl"))
+    for epoch in range(70):
+        Xs = []
+        Ys = []
         model.train()
         for x, y in train_dataloader:
             x = x.cuda()
             y = y.cuda()
+            # print(y)
             out = model(x)
-
             loss = F.cross_entropy(out, y)
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
-        
+            Xs.append(out.detach().cpu().numpy())
+            Ys.append(y.cpu().numpy())
+        Xs = np.concatenate(Xs, 0).reshape(-1)
+        Ys = np.concatenate(Ys, 0)
+        # mse = np.mean((Xs-Ys)**2)
+        # print(mse)
+        # print(loss)
         lr_scheduler.step()
         model.eval()
         with torch.no_grad():
@@ -113,15 +143,31 @@ for seed in range(1):
             for x, y in test_dataloader:
                 x = x.cuda()
                 out = model(x)
-                Xs.append(torch.argmax(out, 1).cpu())
-                Ys.append(y.view(-1))
+                Xs.append(torch.argmax(out,1).cpu().view(-1))
+                Ys.append(y.view(-1,1))
             
-            Xs = torch.cat(Xs, 0)
-            Ys = torch.cat(Ys, 0)
-            accuracy = (Xs == Ys).sum() / Xs.shape[0]
-            if best_accuracy < accuracy:
-                best_accuracy = accuracy
-                best_state_dict = model.state_dict()
-                torch.save(best_state_dict, "low_pretrained.pkl")
-            print(f"Epoch: [{epoch}], Acc: {accuracy}")
-    print(f"Seed: {seed}, Best Acc: {best_accuracy}")
+            Xs = torch.cat(Xs, 0).view(-1)
+            Ys = torch.cat(Ys, 0).view(-1)
+            acc = ((Xs==Ys).sum()/Xs.shape[0])
+            # print(acc)
+            if acc > best_acc:
+                best_acc = acc
+            # for i in range(5):
+            #     print(f"{i}:", (Ys == i).sum())
+            #     print(f"{i}:", ((Xs==Ys) * (Ys == i)).sum() / (Ys == i).sum())
+            # mse = np.mean((Xs-Ys)**2)
+            # corr = pearsonr(Xs, Ys)[0]
+            #if best_mse > mse:
+            #    best_mse = mse
+            #     best_corr = corr
+            #    best_Xs = Xs
+            #    best_Ys = Ys
+            # print(f"Epoch: [{epoch}], MSE: {np.mean((Xs-Ys)**2)}, Correlation: {pearsonr(Xs, Ys)[0]}")
+
+    # print(f"Seed: {seed}, Best MSE: {mse}, correlation: {corr}")
+    print(best_acc)
+# import matplotlib.pyplot as plt
+# plt.scatter(best_Xs, best_Ys)
+# plt.plot(range(len(best_Xs)), , label="Ground-truth")
+# plt.legend()
+# plt.savefig("prediction.png", bbox_inches="tight")

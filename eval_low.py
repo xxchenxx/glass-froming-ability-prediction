@@ -93,19 +93,8 @@ for seed in range(1):
     best_mse = 100000
     best_corr = 0
     best_accuracy = 0
-    for epoch in range(10):
-        model.train()
-        for x, y in train_dataloader:
-            x = x.cuda()
-            y = y.cuda()
-            out = model(x)
-
-            loss = F.cross_entropy(out, y)
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        
-        lr_scheduler.step()
+    model.load_state_dict(torch.load('low_pretrained.pkl'))
+    for epoch in range(1):
         model.eval()
         with torch.no_grad():
             Xs = []
@@ -119,9 +108,19 @@ for seed in range(1):
             Xs = torch.cat(Xs, 0)
             Ys = torch.cat(Ys, 0)
             accuracy = (Xs == Ys).sum() / Xs.shape[0]
-            if best_accuracy < accuracy:
-                best_accuracy = accuracy
-                best_state_dict = model.state_dict()
-                torch.save(best_state_dict, "low_pretrained.pkl")
+            print(f"Epoch: [{epoch}], Acc: {accuracy}")
+        
+        with torch.no_grad():
+            Xs = []
+            Ys = []
+            for x, y in train_dataloader:
+                x = x.cuda()
+                out = model(x)
+                Xs.append(torch.argmax(out, 1).cpu())
+                Ys.append(y.view(-1))
+            
+            Xs = torch.cat(Xs, 0)
+            Ys = torch.cat(Ys, 0)
+            accuracy = (Xs == Ys).sum() / Xs.shape[0]
             print(f"Epoch: [{epoch}], Acc: {accuracy}")
     print(f"Seed: {seed}, Best Acc: {best_accuracy}")

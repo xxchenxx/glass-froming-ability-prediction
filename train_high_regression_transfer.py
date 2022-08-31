@@ -25,7 +25,7 @@ def CNNmodel_PTR():
     model.add(Dense(2,activation='softmax'))
     adam = Adam(lr=1e-4)
     # We add metrics to get more results you want to see
-    model.compile(optimizer=adam,loss='categorical_crossentropy',metrics=['accuracy'])
+    model.compile(optimizer=adam,loss='categorical_crossentropy',metrics=['mse'])
     return model
 """
 def set_seed(seed):
@@ -52,7 +52,7 @@ class Model(nn.Module):
             nn.Linear(1152, 64),
             # nn.LayerNorm(64), 
             nn.ReLU(),
-            nn.Linear(64, 5, bias=False))
+            nn.Linear(64, 1, bias=False))
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -71,36 +71,36 @@ class Model(nn.Module):
         out = self.fc(out)
         return out
     
-for seed in range(1):
+for seed in range(10):
     set_seed(seed)
     model = Model()
     model = model.cuda()
-    data = pickle.load(open(f"low_data_split.pkl", "rb"))
+    model.load_state_dict(torch.load("low_pretrained_regression.pkl"))
+    data = pickle.load(open(f"data_split_5_percent.pkl", "rb"))
     y = data['train_labels']
-    new_y = (y*2).astype(int)
-    new_y[new_y > 4] = 4
-    new_test_y = (data['test_labels'] * 2).astype(int)
-    new_test_y[new_test_y > 4] = 4
-    train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['train_Xs']).float(), torch.from_numpy(new_y).long())
-    test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['test_Xs']).float(), torch.from_numpy(new_test_y).long())
+    
+    train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['train_Xs']).float(), torch.from_numpy(data['train_labels']).float())
+    test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['test_Xs']).float(), torch.from_numpy(data['test_labels']).float())
 
-    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=16)
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=16)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-6)
+    optimizer = torch.optim.SGD([
+                {'params': [p for name, p in model.named_parameters() if 'mask' not in name], "lr": 0.05, 'weight_decay': 0},
+                {'params': [p for name, p in model.named_parameters() if 'mask' in name], "lr": 10, 'weight_decay': 0}
+            ])
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
     best_mse = 100000
     best_corr = 0
-    best_accuracy = 0
-    for epoch in range(10):
+    for epoch in range(90):
         model.train()
         for x, y in train_dataloader:
             x = x.cuda()
             y = y.cuda()
             out = model(x)
 
-            loss = F.cross_entropy(out, y)
+            loss = F.mse_loss(out, y)
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
@@ -113,15 +113,23 @@ for seed in range(1):
             for x, y in test_dataloader:
                 x = x.cuda()
                 out = model(x)
-                Xs.append(torch.argmax(out, 1).cpu())
+                Xs.append(out.view(-1))
                 Ys.append(y.view(-1))
             
-            Xs = torch.cat(Xs, 0)
+            Xs = torch.cat(Xs, 0).cpu()
             Ys = torch.cat(Ys, 0)
-            accuracy = (Xs == Ys).sum() / Xs.shape[0]
-            if best_accuracy < accuracy:
-                best_accuracy = accuracy
-                best_state_dict = model.state_dict()
-                torch.save(best_state_dict, "low_pretrained.pkl")
-            print(f"Epoch: [{epoch}], Acc: {accuracy}")
-    print(f"Seed: {seed}, Best Acc: {best_accuracy}")
+            mse = F.mse_loss(Xs, Ys)
+            # print(pearsonr(Xs, Ys))
+            if best_mse > mse:
+                best_mse = mse
+                best_Xs = Xs
+                best_Ys = Ys
+            # print(f"Epoch: [{epoch}], MSE: {mse}")
+    print(f"Seed: {seed}, Best MSE: {best_mse}")
+    
+    import matplotlib.pyplot as plt
+
+    plt.scatter(best_Xs.cpu().numpy(), best_Ys.cpu().numpy())
+    plt.savefig(f"regression_{seed}.png", bbox_inches="tight")
+    plt.close()
+    # assert False
