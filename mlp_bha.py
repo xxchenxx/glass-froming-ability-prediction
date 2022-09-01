@@ -31,7 +31,7 @@ class MLP(nn.Module):
 torch.manual_seed(42)
 # Load Boston dataset
 import pickle
-data = pickle.load(open(f"data_split_MLP_5_percent.pkl", "rb"))
+data = pickle.load(open(f"data/data_split_MLP_10_percent.pkl", "rb"))
 y = data['train_labels']
 import numpy as np
 X_train = data['train_Xs']

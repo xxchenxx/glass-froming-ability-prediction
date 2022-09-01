@@ -2,7 +2,7 @@ import pandas as pd
 import pickle
 import re
 import copy
-df = pd.read_csv("high_fidelity.csv", sep="\t")
+df = pd.read_csv("data/high_fidelity.csv", sep="\t")
 [property_name_list,property_list,element_name,_] = pickle.load(open('element_property.txt', 'rb'))
 element = list(df.columns[1:11])
 print(element)
@@ -76,4 +76,3 @@ final_test_Ys = np.stack(final_test_Ys)
 print(final_Xs.shape)
 current_split = {"train_Xs": final_Xs, "train_labels": final_Ys, "test_Xs": final_test_Xs, "test_labels": final_test_Ys}
 pickle.dump(current_split, open(f"data_split_5_percent.pkl", "wb"))
-# pickle.dump([Xs, Ys], open('high_data.pkl', "wb"))
