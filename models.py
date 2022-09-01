@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 
 class MaskedConv2d(nn.Conv2d):
     def set_incremental_weights(self, beta=True) -> None:

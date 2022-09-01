@@ -2,7 +2,7 @@ import pandas as pd
 import pickle
 import re
 import copy
-df = pd.read_csv("high_fidelity.csv", sep="\t")
+df = pd.read_csv("data/high_fidelity.csv", sep="\t")
 [property_name_list,property_list,element_name,_] = pickle.load(open('element_property.txt', 'rb'))
 element = list(df.columns[1:11])
 print(element)
@@ -24,9 +24,6 @@ def AT(x_array, temp):#atomic table representation
         xj=int(Z_row_column[index-1][2])#col num
         X[0][xi-1][xj-1]=tx2_value[j]/100.0
     print(X)
-    assert False
-    # X_BMG=copy.deepcopy(X)
-    # X_BMG[0][10][10]=1.0 #processing parameter
     print(temp)
     X[1] = [[(temp - 273.15) / 2000 for ai in range(18)]for aj in range(9)]
     return X #[X,X_BMG]
