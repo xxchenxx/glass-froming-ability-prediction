@@ -220,7 +220,7 @@ def main(args):
                     best_Ys = Ys
 
         mses.append(best_mse)
-
+    print(mses)
     print(f"Mean MSE: {sum(mses) / len(mses)}")
 if __name__ == '__main__':
     main(args)
