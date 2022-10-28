@@ -74,8 +74,8 @@ class Model(nn.Module):
 for seed in range(10):
     model = Model()
     model = model.cuda()
-    model.load_state_dict(torch.load("low_pretrained_regression.pkl"))
-    data = pickle.load(open(f"data_split_new_{seed}.pkl", "rb"))
+    # model.load_state_dict(torch.load("low_pretrained_regression.pkl"))
+    data = pickle.load(open(f"data/data_split_new_{seed}.pkl", "rb"))
     y = data['train_labels']
     
     train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['train_Xs']).float(), torch.from_numpy(data['train_labels']).float())

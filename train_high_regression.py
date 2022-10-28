@@ -51,8 +51,6 @@ class Model(nn.Module):
         out = self.fc(out)
         return out
     
-import sys
-file_split = sys.argv[1]
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -60,10 +58,11 @@ parser.add_argument("--data", type=str)
 parser.add_argument("--checkpoint", type=str, default=None)
 parser.add_argument("--lr", type=float, default=0.01)
 parser.add_argument("--batch-size", type=int, default=4)
+parser.add_argument("--output-name", type=str)
 
 args = parser.parse_args()
 
-for seed in range(10):
+for seed in range(42,43):
     set_seed(seed)
     model = Model()
     model = model.cuda()
@@ -124,6 +123,7 @@ for seed in range(10):
                 best_mse = mse
                 best_Xs = Xs
                 best_Ys = Ys
+                best_model_weight = model.state_dict()
             # print(f"Epoch: [{epoch}], MSE: {mse}")
     print(f"Seed: {seed}, Best MSE: {best_mse}")
     
@@ -132,4 +132,9 @@ for seed in range(10):
     plt.scatter(best_Xs.cpu().numpy(), best_Ys.cpu().numpy())
     plt.savefig("regression.png", bbox_inches="tight")
     plt.close()
-   
+    torch.save({
+        'Xs': best_Xs,
+        'Ys': best_Ys,
+        'model_weight': best_model_weight
+    }, f'{args.output_name}-{seed}.pkl')
+

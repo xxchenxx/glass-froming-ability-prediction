@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from scipy.stats import pearsonr
-from imblearn.over_sampling import RandomOverSampler
+# from imblearn.over_sampling import RandomOverSampler
 
 from utils import MaskedConv2d,  pruning_model, set_seed
 
@@ -56,32 +56,25 @@ class Model(nn.Module):
             return self.fc(out), self.new_fc(out)
 
 
-for seed in range(10):
+for seed in range(42,43):
     set_seed(seed)
     model = Model()
     model = model.cuda()
     
-    data = pickle.load(open(f"data_split_10_percent.pkl", "rb"))
-    y = data['train_labels']
-    X = data['train_Xs']
-
+    data = pickle.load(open(f"data/data_split_10_percent.pkl", "rb"))
     train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['train_Xs']).float(), torch.from_numpy(data['train_labels']).float())
     test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['test_Xs']).float(), torch.from_numpy(data['test_labels']).float())
-
+    print(len(train_dataset))
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=4, shuffle=True)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=4)
 
-    low_data = pickle.load(open(f"low_data_split.pkl", "rb"))
+    low_data = pickle.load(open('data/low_data_split.pkl', "rb"))
     low_train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(low_data['train_Xs']).float(), torch.from_numpy(low_data['train_labels']).float())
-    low_test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(low_data['test_Xs']).float(), torch.from_numpy(low_data['test_labels']).float())
-
     low_train_dataloader = torch.utils.data.DataLoader(low_train_dataset, batch_size=4, shuffle=True)
-    low_test_dataloader = torch.utils.data.DataLoader(low_test_dataset, batch_size=4)
 
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     best_mse = 100000
-
-    model.load_state_dict(torch.load("low_pretrained_regression.pkl"))
+    model.load_state_dict(torch.load("low_pretrained_regression.pth.tar"))
     import copy
     model.new_fc = nn.Sequential(
             nn.Linear(1152, 64),
@@ -100,7 +93,7 @@ for seed in range(10):
 
     
     optimizer = torch.optim.SGD([
-                {'params': [p for name, p in model.named_parameters() if 'mask' not in name], "lr": 0.001, 'weight_decay': 0},
+                {'params': [p for name, p in model.named_parameters() if 'mask' not in name], "lr": 0.01, 'weight_decay': 0},
                 {'params': [p for name, p in model.named_parameters() if 'mask' in name], "lr": 3.5, 'weight_decay': 0}
             ])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
@@ -124,11 +117,14 @@ for seed in range(10):
             model_lower.load_state_dict(state_dict)
             weights = []
             alphas = []
-
-            model.eval()
+            
+            model.train()
+            for name, m in model.named_modules():
+                if isinstance(m, MaskedConv2d):
+                    m.set_lower()
             for _ in range(lower_steps):    
                 previous_lr = optimizer.param_groups[0]['lr']
-                optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr'] / 100        
+                optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr'] # / 100        
                 try:
                     low_image, low_target = next(low_train_dataloader_iter)
                 except:
@@ -140,13 +136,14 @@ for seed in range(10):
                 
                 
                 output_old, output_new = model(low_image, second=True)
-                loss = F.mse_loss(output_old, low_target)
+                loss = F.mse_loss(output_old.squeeze(), low_target.squeeze())
                 # print(loss)
                 loss.backward()
                 
                 for name, m in model.named_modules():
                     if isinstance(m, MaskedConv2d):
                         m.mask_alpha.grad = None
+                        m.mask_beta.grad = None
                 if _ > 0:
                     for name, m in model.named_modules():
                         if isinstance(m, MaskedConv2d):
@@ -157,7 +154,7 @@ for seed in range(10):
 
                 if _ == 0:
                     output_old, _ = model_lower(low_image, second=True)
-                    loss_lower = F.mse_loss(output_old, low_target)
+                    loss_lower = F.mse_loss(output_old.squeeze(), low_target.squeeze())
                     for name, m in model_lower.named_modules():
                         if isinstance(m, MaskedConv2d):
                             weights.append(m.weight)
@@ -172,7 +169,8 @@ for seed in range(10):
             model.train()
             # print(y)
             out = model(x)
-            loss = F.mse_loss(out, y)
+            loss = F.mse_loss(out.squeeze(), y)
+            loss.backward()
             grad_new_w = []
             for name, m in model.named_modules():
                 if isinstance(m, MaskedConv2d):
@@ -192,6 +190,7 @@ for seed in range(10):
                         m.mask_alpha.data.sub_(grads[idx] * alpha_lr)
                         idx += 1
             optimizer.step()
+
             model.zero_grad()
             # end unrolling
 
@@ -204,30 +203,26 @@ for seed in range(10):
                         # print(lr * 1.5e-4)
                         #print(beta.data.abs().mean())
                         
-                        m1 = beta >= lr * 1e-4
-                        m2 = beta <= -lr * 1e-4
-                        m3 = (beta.abs() < lr * 1e-4)
-                        m.mask_beta.data[m1] = m.mask_beta.data[m1] - lr * 1e-4
-                        m.mask_beta.data[m2] = m.mask_beta.data[m2] + lr * 1e-4
+                        m1 = beta >= lr * 1.425e-3
+                        m2 = beta <= -lr * 1.425e-3
+                        m3 = (beta.abs() < lr * 1.425e-3)
+                        m.mask_beta.data[m1] = m.mask_beta.data[m1] - lr * 1.42e-3
+                        m.mask_beta.data[m2] = m.mask_beta.data[m2] + lr * 1.42e-3
                         m.mask_beta.data[m3] = 0
                     if not no_alpha:
                         alpha = m.mask_alpha.data.detach().clone()
                         lr = optimizer.param_groups[1]['lr']
-                        # print(lr * 1e-4)
+                        # print(lr * 1.425e-3)
                         #print(alpha.data.abs().mean())
-                        m1 = alpha >= lr * 1e-4
-                        m2 = alpha <= -lr * 1e-4
-                        m3 = (alpha.abs() < lr * 1e-4)
-                        m.mask_alpha.data[m1] = m.mask_alpha.data[m1] - lr * 1e-4
-                        m.mask_alpha.data[m2] = m.mask_alpha.data[m2] + lr * 1e-4
+                        m1 = alpha >= lr * 1.425e-3
+                        m2 = alpha <= -lr * 1.425e-3
+                        m3 = (alpha.abs() < lr * 1.425e-3)
+                        m.mask_alpha.data[m1] = m.mask_alpha.data[m1] - lr * 1.42e-3
+                        m.mask_alpha.data[m2] = m.mask_alpha.data[m2] + lr * 1.42e-3
                         m.mask_alpha.data[m3] = 0
             Xs.append(out.detach().cpu().numpy())
             Ys.append(y.cpu().numpy())
-        # Xs = np.concatenate(Xs, 0).reshape(-1)
-        # Ys = np.concatenate(Ys, 0)
-        # mse = np.mean((Xs-Ys)**2)
-        # print(mse)
-        # print(loss)
+
         lr_scheduler.step()
         model.eval()
         if epoch == 89:
@@ -236,7 +231,7 @@ for seed in range(10):
                     m.set_upper()
                     # print(((m.mask_beta ** 2) / ((m.mask_beta ** 2) + m.epsilon)).mean())
                     # print(((m.mask_alpha ** 2) / ((m.mask_alpha ** 2) + m.epsilon)).mean())
-                    print(((m.mask_alpha ** 2) / ((m.mask_alpha ** 2) + m.epsilon) * (m.mask_beta ** 2) / ((m.mask_beta ** 2) + m.epsilon)).mean())
+                    print(f"Sparsity of layer {name}: {((m.mask_alpha ** 2) / ((m.mask_alpha ** 2) + m.epsilon) * (m.mask_beta ** 2) / ((m.mask_beta ** 2) + m.epsilon)).mean()}")
                 #print(m.mask_beta.data.abs().mean())
                 #print(m.mask_alpha.data.abs().mean())
 
@@ -256,9 +251,17 @@ for seed in range(10):
                 best_mse = mse
                 best_Xs = Xs
                 best_Ys = Ys
+                best_model_weight = copy.deepcopy(model.state_dict())
+                epsilon = model.conv1.epsilon
+                torch.save({
+                    'Xs': best_Xs,
+                    'Ys': best_Ys,
+                    'model_weight': best_model_weight,
+                    'epsilon': epsilon}, f'bi-rpt-seed-{seed}.pkl')
     print(best_mse)
     import matplotlib.pyplot as plt
     plt.scatter(best_Xs.cpu().numpy(), best_Ys.cpu().numpy())
     plt.savefig(f"bisparse_regression_{seed}.png", bbox_inches="tight")
-
     plt.close()
+    
+    

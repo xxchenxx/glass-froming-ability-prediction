@@ -56,12 +56,12 @@ class Model(nn.Module):
         else:
             return self.fc(out), self.new_fc(out)
 
-for seed in range(10):
+for seed in range(1):
     set_seed(seed)
     model = Model()
     model = model.cuda()
     
-    data = pickle.load(open(f"data_split_new_{seed}.pkl", "rb"))
+    data = pickle.load(open(f"data/data_split_new_{seed}.pkl", "rb"))
 
     train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['train_Xs']).float(), torch.from_numpy(data['train_labels']).float())
     test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['test_Xs']).float(), torch.from_numpy(data['test_labels']).float())
@@ -69,7 +69,7 @@ for seed in range(10):
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=4, shuffle=True)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=4)
 
-    low_data = pickle.load(open(f"low_data_split.pkl", "rb"))
+    low_data = pickle.load(open(f"data/low_data_split.pkl", "rb"))
     low_train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(low_data['train_Xs']).float(), torch.from_numpy(low_data['train_labels']).float())
     low_test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(low_data['test_Xs']).float(), torch.from_numpy(low_data['test_labels']).float())
 
@@ -79,7 +79,7 @@ for seed in range(10):
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     best_mse = 100000
 
-    model.load_state_dict(torch.load("low_pretrained_regression.pkl"))
+    model.load_state_dict(torch.load("low_pretrained_regression.pth.tar"))
     import copy
     model.new_fc = nn.Sequential(
             nn.Linear(1152, 64),
@@ -136,7 +136,7 @@ for seed in range(10):
                 
                 
                 output_old, output_new = model(low_image, second=True)
-                loss = F.mse_loss(output_old, low_target)
+                loss = F.mse_loss(output_old.view(-1), low_target.view(-1))
                 # print(loss)
                 loss.backward()
                 
@@ -152,7 +152,7 @@ for seed in range(10):
 
                 if _ == 0:
                     output_old, _ = model_lower(low_image, second=True)
-                    loss_lower = F.mse_loss(output_old, low_target)
+                    loss_lower = F.mse_loss(output_old.view(-1), low_target.view(-1))
                     for name, m in model_lower.named_modules():
                         if isinstance(m, MaskedConv2d):
                             weights.append(m.weight)
@@ -165,7 +165,7 @@ for seed in range(10):
             model.train()
             # print(y)
             out = model(x)
-            loss = F.mse_loss(out, y)
+            loss = F.mse_loss(out.view(-1), y.view(-1))
             loss.backward()
             grad_new_w = []
             for name, m in model.named_modules():
@@ -251,5 +251,5 @@ for seed in range(10):
                 best_mse = mse
                 best_Xs = Xs
                 best_Ys = Ys
-
+                torch.save(model.state_dict(), 'model_weight.pkl')
     print(best_mse)

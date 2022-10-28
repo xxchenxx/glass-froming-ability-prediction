@@ -75,7 +75,7 @@ for seed in range(1):
     set_seed(seed)
     model = Model()
     model = model.cuda()
-    data = pickle.load(open(f"low_data_split.pkl", "rb"))
+    data = pickle.load(open(f"data/low_data_split.pkl", "rb"))
     y = data['train_labels']
     new_y = (y*2).astype(int)
     new_y[new_y > 4] = 4

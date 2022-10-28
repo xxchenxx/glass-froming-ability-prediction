@@ -36,17 +36,34 @@ def set_seed(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
+class MoEConv(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, n_experts=3):
+        super().__init__()
+        print(in_channels, out_channels, kernel_size, stride, padding)
+        self.n_experts = n_experts
+        self.convs = nn.ModuleList([
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding) for _ in range(n_experts)
+        ])
+    
+    def forward(self, x, idx):
+        results = torch.stack([self.convs[i](x) for i in range(self.n_experts)], 1)
+
+        idx = idx.view(-1, 1, 1, 1, 1).repeat((1, 1, *results.shape[2:]))
+        results = torch.squeeze(torch.gather(results, 1, idx), 1)
+
+        return results
+
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.conv1 = nn.Conv2d(2, 16, kernel_size=3, stride=1, padding=1)
+        self.conv1 = MoEConv(2, 16, kernel_size=3, stride=1, padding=1)
         self.bn1 = nn.BatchNorm2d(16)
         self.maxpool1 = nn.MaxPool2d(2, 2, padding=1)
-        self.conv2 = nn.Conv2d(16, 32, 3, padding=1)
+        self.conv2 = MoEConv(16, 32, 3, padding=1)
         self.bn2 = nn.BatchNorm2d(32)
         self.maxpool2 = nn.MaxPool2d(2, 2, padding=1)
-        self.conv3 = nn.Conv2d(32, 64, 3, padding=1)
+        self.conv3 = MoEConv(32, 64, 3, padding=1)
         self.bn3 = nn.BatchNorm2d(64)
         self.maxpool3 = nn.MaxPool2d(2, 2, padding=1)
         self.fc = nn.Sequential(
@@ -62,12 +79,12 @@ class Model(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
             
-    def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
+    def forward(self, x, idx):
+        out = F.relu(self.bn1(self.conv1(x, idx)))
         out = self.maxpool1(out)
-        out = F.relu(self.bn2(self.conv2(out)))
+        out = F.relu(self.bn2(self.conv2(out, idx)))
         out = self.maxpool2(out)
-        out = F.relu(self.bn3(self.conv3(out)))
+        out = F.relu(self.bn3(self.conv3(out, idx)))
         out = out.view(out.shape[0], -1)
         out = self.fc(out)
         return out
@@ -81,8 +98,8 @@ for seed in range(1):
     train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['train_Xs']).float(), torch.from_numpy(data['train_labels']).float())
     test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['test_Xs']).float(), torch.from_numpy(data['test_labels']).float())
 
-    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=256, shuffle=True)
-    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=256)
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True)
+    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=16)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=60, gamma=0.1)
@@ -98,13 +115,13 @@ for seed in range(1):
             model.train()
             for x, y in train_dataloader:
                 x = x.cuda()
-                family = torch.sum(x[:, 0] > 0, (1,2))
+                temp = (x[:, 1, 0, 0] * 3).long()
 
-                x = x[family <= 10]
+                x = x
                 if x.shape[0] == 0:
                     continue
-                y = y.cuda()[family <= 10]
-                out = model(x)
+                y = y.cuda()
+                out = model(x, temp)
 
                 loss = F.mse_loss(out.view(-1), y.view(-1))
                 loss.backward()
