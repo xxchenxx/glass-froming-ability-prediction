@@ -56,7 +56,7 @@ class Model(nn.Module):
             return self.fc(out), self.new_fc(out)
 
 
-for seed in range(42,43):
+for seed in range(1,2):
     set_seed(seed)
     model = Model()
     model = model.cuda()
@@ -93,7 +93,7 @@ for seed in range(42,43):
 
     
     optimizer = torch.optim.SGD([
-                {'params': [p for name, p in model.named_parameters() if 'mask' not in name], "lr": 0.01, 'weight_decay': 0},
+                {'params': [p for name, p in model.named_parameters() if 'mask' not in name], "lr": 0.001, 'weight_decay': 0},
                 {'params': [p for name, p in model.named_parameters() if 'mask' in name], "lr": 3.5, 'weight_decay': 0}
             ])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)

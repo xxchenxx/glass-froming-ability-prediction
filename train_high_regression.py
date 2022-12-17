@@ -56,13 +56,13 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--data", type=str)
 parser.add_argument("--checkpoint", type=str, default=None)
-parser.add_argument("--lr", type=float, default=0.01)
+parser.add_argument("--lr", type=float, default=0.001)
 parser.add_argument("--batch-size", type=int, default=4)
 parser.add_argument("--output-name", type=str)
 
 args = parser.parse_args()
 
-for seed in range(42,43):
+for seed in range(1, 10):
     set_seed(seed)
     model = Model()
     model = model.cuda()
@@ -124,6 +124,7 @@ for seed in range(42,43):
                 best_Xs = Xs
                 best_Ys = Ys
                 best_model_weight = model.state_dict()
+
             # print(f"Epoch: [{epoch}], MSE: {mse}")
     print(f"Seed: {seed}, Best MSE: {best_mse}")
     

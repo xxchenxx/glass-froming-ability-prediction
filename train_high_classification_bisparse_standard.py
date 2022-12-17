@@ -7,17 +7,18 @@ import numpy as np
 from scipy.stats import pearsonr
 from imblearn.over_sampling import RandomOverSampler
 
-from utils import MaskedConv2d, Model, pruning_model, set_seed
+from utils import MaskedConv2d, pruning_model, set_seed
 
 
 import sys
-alr = float(sys.argv[1])
-print(alr)
+alr = 10 # float(sys.argv[1])
+# print(alr)
+lamb = 0.8e-3
+
 import pandas as pd
 
 lower_steps = 1
 no_alpha = no_beta = False
-
 
 class Model(nn.Module):
     def __init__(self):
@@ -59,35 +60,47 @@ class Model(nn.Module):
             return self.fc(out), self.new_fc(out)
 
 for seed in range(10):
-    set_seed(seed)
     model = Model()
     model = model.cuda()
     
-    data = pickle.load(open(f"data/data_split_10_percent.pkl", "rb"))
+    data = pickle.load(open(f"data/data_split_new_0.pkl", "rb"))
     y = data['train_labels']
     new_y = (y*2).astype(int)
     X = data['train_Xs']
     upsample = False
     print(f"Upsample: {upsample}")
-    if upsample:
-        ros = RandomOverSampler(random_state=0)
-        X = X.reshape(X.shape[0], -1)
-        # print(X.shape)
-        # print(y.reshape(-1,1).shape)
-        X = np.concatenate([X, y.reshape(-1,1)], 1)
-        X_resampled, y_resampled = ros.fit_resample(X, new_y)
-        # print(X_resampled.shape)
-        y_original = X_resampled[:, -1]
-        # print(y_resampled)
-        X_original = X_resampled[:, :-1].reshape(-1, *data['train_Xs'].shape[1:])
-    else:
-        X_original = X
-        y_resampled = new_y
+    
+    all_images = np.concatenate([data['train_Xs'], data['test_Xs']], 0)
+    all_labels = np.concatenate([data['train_labels'], data['test_labels']], 0)
+    y_resampled = new_y
+    shot = 5
+    query_shots = 10
+    support_samples = []
+    query_samples = []
+    for each_class in [0,1,2,3,4]:
+        class_indexes = torch.where(all_labels == each_class)[0]
+        indexes = np.random.choice(a=class_indexes, size=shot + query_shots, replace=False)
+        support_samples.append(all_images[indexes[:shot]])
+        query_samples.append(all_images[indexes[shot:]])
 
-    train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(X_original).float(), torch.from_numpy(y_resampled).long())
-    fake_test_label = (data['test_labels'] * 2).astype(int)
-    test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['test_Xs']).float(), torch.from_numpy(fake_test_label).long())
+    y_support = torch.arange(5)[:, None].repeat(1, shot).reshape(-1)
+    y_query = torch.arange(5)[:, None].repeat(1, query_shots).reshape(-1)
 
+
+    print(support_samples[0].shape)
+    z_support = torch.cat(support_samples, 0)
+    z_query = torch.cat(query_samples, 0)
+    
+    print(z_support.shape)
+    print(z_query.shape)
+    train_dataset = torch.utils.data.TensorDataset(
+        z_support, y_support, 
+    )
+
+    test_dataset = torch.utils.data.TensorDataset(
+        z_query, y_query,
+    )
+    
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=4, shuffle=True)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=4)
 
@@ -106,7 +119,7 @@ for seed in range(10):
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     best_acc = 0
 
-    # model.load_state_dict(torch.load("low_pretrained.pkl"))
+    model.load_state_dict(torch.load("low_pretrained.pkl"))
     import copy
     model.new_fc = nn.Sequential(
             nn.Linear(1152, 64),
@@ -153,7 +166,7 @@ for seed in range(10):
             model.eval()
             for _ in range(1):     
                 previous_lr = optimizer.param_groups[0]['lr']
-                optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr']
+                optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr'] / 100
                 try:
                     low_image, low_target = next(low_train_dataloader_iter)
                 except:
@@ -228,25 +241,25 @@ for seed in range(10):
                     if not no_beta:
                         beta = m.mask_beta.data.detach().clone()
                         lr = optimizer.param_groups[1]['lr']
-                        # print(lr * 1.5e-4)
+                        # print(lr * 3e-3)
                         #print(beta.data.abs().mean())
                         
-                        m1 = beta >= lr * 1.42e-3
-                        m2 = beta <= -lr * 1.42e-3
-                        m3 = (beta.abs() < lr * 1.42e-3)
-                        m.mask_beta.data[m1] = m.mask_beta.data[m1] - lr * 1.42e-3
-                        m.mask_beta.data[m2] = m.mask_beta.data[m2] + lr * 1.42e-3
+                        m1 = beta >= lr * lamb
+                        m2 = beta <= -lr * lamb
+                        m3 = (beta.abs() < lr * lamb)
+                        m.mask_beta.data[m1] = m.mask_beta.data[m1] - lr * lamb
+                        m.mask_beta.data[m2] = m.mask_beta.data[m2] + lr * lamb
                         m.mask_beta.data[m3] = 0
                     if not no_alpha:
                         alpha = m.mask_alpha.data.detach().clone()
                         lr = optimizer.param_groups[1]['lr']
-                        # print(lr * 1.42e-3)
+                        # print(lr * lamb)
                         #print(alpha.data.abs().mean())
-                        m1 = alpha >= lr * 1.42e-3
-                        m2 = alpha <= -lr * 1.42e-3
-                        m3 = (alpha.abs() < lr * 1.42e-3)
-                        m.mask_alpha.data[m1] = m.mask_alpha.data[m1] - lr * 1.42e-3
-                        m.mask_alpha.data[m2] = m.mask_alpha.data[m2] + lr * 1.42e-3
+                        m1 = alpha >= lr * lamb
+                        m2 = alpha <= -lr * lamb
+                        m3 = (alpha.abs() < lr * lamb)
+                        m.mask_alpha.data[m1] = m.mask_alpha.data[m1] - lr * lamb
+                        m.mask_alpha.data[m2] = m.mask_alpha.data[m2] + lr * lamb
                         m.mask_alpha.data[m3] = 0
 
             Xs.append(out.detach().cpu().numpy())
@@ -283,6 +296,5 @@ for seed in range(10):
             # print(acc)
             if acc > best_acc:
                 best_acc = acc
-            
     print(best_acc)
 

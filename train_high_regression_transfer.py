@@ -71,12 +71,12 @@ class Model(nn.Module):
         out = self.fc(out)
         return out
     
-for seed in range(10):
+for seed in range(1, 10):
     set_seed(seed)
     model = Model()
     model = model.cuda()
     model.load_state_dict(torch.load("low_pretrained_regression.pkl"))
-    data = pickle.load(open(f"data_split_5_percent.pkl", "rb"))
+    data = pickle.load(open(f"data/data_split_10_percent.pkl", "rb"))
     y = data['train_labels']
     
     train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['train_Xs']).float(), torch.from_numpy(data['train_labels']).float())
@@ -86,7 +86,7 @@ for seed in range(10):
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=16)
 
     optimizer = torch.optim.SGD([
-                {'params': [p for name, p in model.named_parameters() if 'mask' not in name], "lr": 0.05, 'weight_decay': 0},
+                {'params': [p for name, p in model.named_parameters() if 'mask' not in name], "lr": 0.01, 'weight_decay': 0},
                 {'params': [p for name, p in model.named_parameters() if 'mask' in name], "lr": 10, 'weight_decay': 0}
             ])
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
@@ -100,7 +100,7 @@ for seed in range(10):
             y = y.cuda()
             out = model(x)
 
-            loss = F.mse_loss(out, y)
+            loss = F.mse_loss(out.view(-1), y.view(-1))
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
@@ -124,6 +124,9 @@ for seed in range(10):
                 best_mse = mse
                 best_Xs = Xs
                 best_Ys = Ys
+                torch.save({
+                    'Xs': best_Xs,
+                    'Ys': best_Ys}, f'transfer-seed-{seed}.pkl')
             # print(f"Epoch: [{epoch}], MSE: {mse}")
     print(f"Seed: {seed}, Best MSE: {best_mse}")
     

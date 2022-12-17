@@ -112,7 +112,7 @@ for seed in range(10):
             model.eval()
             for _ in range(1):     
                 previous_lr = optimizer.param_groups[0]['lr']
-                optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr'] / 100
+                optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr']
                 try:
                     low_image, low_target = next(low_train_dataloader_iter)
                 except:
@@ -190,22 +190,22 @@ for seed in range(10):
                         # print(lr * 1e-4)
                         #print(beta.data.abs().mean())
                         
-                        m1 = beta >= lr * 1e-4
-                        m2 = beta <= -lr * 1e-4
-                        m3 = (beta.abs() < lr * 1e-4)
-                        m.mask_beta.data[m1] = m.mask_beta.data[m1] - lr * 1e-4
-                        m.mask_beta.data[m2] = m.mask_beta.data[m2] + lr * 1e-4
+                        m1 = beta >= lr * 1.42e-3
+                        m2 = beta <= -lr * 1.42e-3
+                        m3 = (beta.abs() < lr * 1.42e-3)
+                        m.mask_beta.data[m1] = m.mask_beta.data[m1] - lr * 1.42e-3
+                        m.mask_beta.data[m2] = m.mask_beta.data[m2] + lr * 1.42e-3
                         m.mask_beta.data[m3] = 0
                     if not no_alpha:
                         alpha = m.mask_alpha.data.detach().clone()
                         lr = optimizer.param_groups[1]['lr']
-                        # print(lr * 1e-4)
+                        # print(lr * 1.42e-3)
                         #print(alpha.data.abs().mean())
-                        m1 = alpha >= lr * 1e-4
-                        m2 = alpha <= -lr * 1e-4
-                        m3 = (alpha.abs() < lr * 1e-4)
-                        m.mask_alpha.data[m1] = m.mask_alpha.data[m1] - lr * 1e-4
-                        m.mask_alpha.data[m2] = m.mask_alpha.data[m2] + lr * 1e-4
+                        m1 = alpha >= lr * 1.42e-3
+                        m2 = alpha <= -lr * 1.42e-3
+                        m3 = (alpha.abs() < lr * 1.42e-3)
+                        m.mask_alpha.data[m1] = m.mask_alpha.data[m1] - lr * 1.42e-3
+                        m.mask_alpha.data[m2] = m.mask_alpha.data[m2] + lr * 1.42e-3
                         m.mask_alpha.data[m3] = 0
 
             Xs.append(out.detach().cpu().numpy())
