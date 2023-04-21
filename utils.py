@@ -57,6 +57,9 @@ class MaskedConv2d(nn.Conv2d):
     def set_incremental_weights(self, beta=True) -> None:
         # self.register_parameter('weight_beta', torch.nn.Parameter(torch.zeros_like(self.weight.data)))
         self.register_parameter('mask_alpha', torch.nn.Parameter(torch.ones_like(self.weight.data)))
+        if beta:
+            self.register_parameter('mask_beta', torch.nn.Parameter(torch.ones_like(self.weight.data)))
+
         self.weight.requires_grad = True
         self.mode = 'lower'
         self.epsilon = 0.1
@@ -64,18 +67,24 @@ class MaskedConv2d(nn.Conv2d):
     
     def set_lower(self) -> None:
         self.weight.requires_grad = True
-        # self.weight_beta.requires_grad = True
+        if self.beta:
+            self.mask_beta.requires_grad = True
         self.mask_alpha.requires_grad = True
         self.mode = 'lower'
     
     def set_upper(self) -> None:
         self.weight.requires_grad = True
-        # self.weight_beta.requires_grad = True
+        if self.beta:
+            self.mask_beta.requires_grad = True
         self.mask_alpha.requires_grad = True
         self.mode = 'upper'
 
     def forward(self, input):
-        weight = (self.weight) * (self.mask_alpha ** 2) / (self.mask_alpha ** 2 + self.epsilon)
+        if not self.beta:
+            weight = (self.weight) * (self.mask_alpha ** 2) / (self.mask_alpha ** 2 + self.epsilon)
+        else:
+            weight = (self.weight) * (self.mask_alpha ** 2) / (self.mask_alpha ** 2 + self.epsilon) * (self.mask_beta ** 2) / (self.mask_beta ** 2 + self.epsilon)
+
 
         #print(weight)
         if torch.__version__ > "1.7.1":

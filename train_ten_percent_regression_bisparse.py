@@ -56,25 +56,25 @@ class Model(nn.Module):
             return self.fc(out), self.new_fc(out)
 
 
-for seed in range(1,2):
+for seed in range(1,10):
     set_seed(seed)
     model = Model()
     model = model.cuda()
     
-    data = pickle.load(open(f"data/data_split_10_percent.pkl", "rb"))
+    data = pickle.load(open(f"data/high_data_filtered.pkl", "rb"))
     train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['train_Xs']).float(), torch.from_numpy(data['train_labels']).float())
     test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['test_Xs']).float(), torch.from_numpy(data['test_labels']).float())
     print(len(train_dataset))
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=4, shuffle=True)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=4)
 
-    low_data = pickle.load(open('data/low_data_split.pkl', "rb"))
+    low_data = pickle.load(open('data/low_data_filtered.pkl', "rb"))
     low_train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(low_data['train_Xs']).float(), torch.from_numpy(low_data['train_labels']).float())
     low_train_dataloader = torch.utils.data.DataLoader(low_train_dataset, batch_size=4, shuffle=True)
 
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     best_mse = 100000
-    model.load_state_dict(torch.load("low_pretrained_regression.pth.tar"))
+    model.load_state_dict(torch.load("low_pretrained_filtered.pkl"))
     import copy
     model.new_fc = nn.Sequential(
             nn.Linear(1152, 64),
@@ -169,7 +169,7 @@ for seed in range(1,2):
             model.train()
             # print(y)
             out = model(x)
-            loss = F.mse_loss(out.squeeze(), y)
+            loss = F.mse_loss(out.squeeze(), y.squeeze())
             loss.backward()
             grad_new_w = []
             for name, m in model.named_modules():
@@ -257,7 +257,7 @@ for seed in range(1,2):
                     'Xs': best_Xs,
                     'Ys': best_Ys,
                     'model_weight': best_model_weight,
-                    'epsilon': epsilon}, f'bi-rpt-seed-{seed}.pkl')
+                    'epsilon': epsilon}, f'bi-rpt-seed-filtered-{seed}.pkl')
     print(best_mse)
     import matplotlib.pyplot as plt
     plt.scatter(best_Xs.cpu().numpy(), best_Ys.cpu().numpy())

@@ -106,7 +106,7 @@ for seed in range(10):
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     best_acc = 0
 
-    model.load_state_dict(torch.load("low_pretrained.pkl"))
+    model.load_state_dict(torch.load("data/low_pretrained.pkl"))
     import copy
     model.new_fc = nn.Sequential(
             nn.Linear(1152, 64),

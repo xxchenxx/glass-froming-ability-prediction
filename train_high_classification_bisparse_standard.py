@@ -13,7 +13,7 @@ from utils import MaskedConv2d, pruning_model, set_seed
 import sys
 alr = 10 # float(sys.argv[1])
 # print(alr)
-lamb = 0.8e-3
+lamb = 0.2e-3
 
 import pandas as pd
 
@@ -59,7 +59,8 @@ class Model(nn.Module):
         else:
             return self.fc(out), self.new_fc(out)
 
-for seed in range(10):
+all_results = []
+for seed in range(20):
     model = Model()
     model = model.cuda()
     
@@ -70,29 +71,26 @@ for seed in range(10):
     upsample = False
     print(f"Upsample: {upsample}")
     
-    all_images = np.concatenate([data['train_Xs'], data['test_Xs']], 0)
-    all_labels = np.concatenate([data['train_labels'], data['test_labels']], 0)
+    all_images = torch.from_numpy(np.concatenate([data['train_Xs'], data['test_Xs']], 0))
+    all_labels = (torch.from_numpy(np.concatenate([data['train_labels'], data['test_labels']], 0)) * 2).long()
     y_resampled = new_y
-    shot = 5
-    query_shots = 10
+    shot = 10
+    query_shots = 15
     support_samples = []
     query_samples = []
-    for each_class in [0,1,2,3,4]:
+    for each_class in [0,1,2,3]:
         class_indexes = torch.where(all_labels == each_class)[0]
+        print(class_indexes.nelement())
         indexes = np.random.choice(a=class_indexes, size=shot + query_shots, replace=False)
         support_samples.append(all_images[indexes[:shot]])
         query_samples.append(all_images[indexes[shot:]])
 
-    y_support = torch.arange(5)[:, None].repeat(1, shot).reshape(-1)
-    y_query = torch.arange(5)[:, None].repeat(1, query_shots).reshape(-1)
+    y_support = torch.arange(4)[:, None].repeat(1, shot).reshape(-1)
+    y_query = torch.arange(4)[:, None].repeat(1, query_shots).reshape(-1)
 
+    z_support = torch.cat(support_samples, 0).float()
+    z_query = torch.cat(query_samples, 0).float()
 
-    print(support_samples[0].shape)
-    z_support = torch.cat(support_samples, 0)
-    z_query = torch.cat(query_samples, 0)
-    
-    print(z_support.shape)
-    print(z_query.shape)
     train_dataset = torch.utils.data.TensorDataset(
         z_support, y_support, 
     )
@@ -119,7 +117,7 @@ for seed in range(10):
     # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     best_acc = 0
 
-    model.load_state_dict(torch.load("low_pretrained.pkl"))
+    model.load_state_dict(torch.load("data/low_pretrained.pkl"))
     import copy
     model.new_fc = nn.Sequential(
             nn.Linear(1152, 64),
@@ -297,4 +295,6 @@ for seed in range(10):
             if acc > best_acc:
                 best_acc = acc
     print(best_acc)
+    all_results.append(float(best_acc))
 
+print(sum(all_results))

@@ -1,5 +1,5 @@
 import pickle
-
+import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -36,6 +36,10 @@ def set_seed(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--input', type=str)
+parser.add_argument('--output', type=str)
+args = parser.parse_args()
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
@@ -76,7 +80,7 @@ for seed in range(1):
     set_seed(seed)
     model = Model()
     model = model.cuda()
-    data = pickle.load(open(f"data/low_data_split.pkl", "rb"))
+    data = pickle.load(open(f"{args.input}", "rb"))
     
     train_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['train_Xs']).float(), torch.from_numpy(data['train_labels']).float())
     test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(data['test_Xs']).float(), torch.from_numpy(data['test_labels']).float())
@@ -92,45 +96,38 @@ for seed in range(1):
     best_corr = 0
     steps = 0
     wandb.init(project='llnl', entity='xxchen', name='no_cl')
-    for curriculum in range(5,6):
+    for epoch in range(180):
+        model.train()
+        for x, y in train_dataloader:
+            x = x.cuda()
+            y = y.cuda()
+            out = model(x)
 
-        for epoch in range(180):
-            model.train()
-            for x, y in train_dataloader:
+            loss = F.mse_loss(out.view(-1), y.view(-1))
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        
+        lr_scheduler.step()
+        model.eval()
+        with torch.no_grad():
+            Xs = []
+            Ys = []
+            for x, y in test_dataloader:
                 x = x.cuda()
-                family = torch.sum(x[:, 0] > 0, (1,2))
-
-                x = x[family <= 10]
-                if x.shape[0] == 0:
-                    continue
-                y = y.cuda()[family <= 10]
+                y = y.view(-1)
                 out = model(x)
-
-                loss = F.mse_loss(out.view(-1), y.view(-1))
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
+                Xs.append(out.view(-1))
+                Ys.append(y.view(-1))
             
-            lr_scheduler.step()
-            model.eval()
-            with torch.no_grad():
-                Xs = []
-                Ys = []
-                for x, y in test_dataloader:
-                    x = x.cuda()
-                    y = y.view(-1)
-                    out = model(x)
-                    Xs.append(out.view(-1))
-                    Ys.append(y.view(-1))
-                
-                Xs = torch.cat(Xs, 0).cpu()
-                Ys = torch.cat(Ys, 0).cpu()
-                mse = F.mse_loss(Xs.view(-1), Ys.view(-1))
-                pearson = pearsonr(Xs, Ys)[0]
-                wandb.log({"pearson": pearson, "test_loss": mse})
-                if best_mse > mse:
-                    best_mse = mse
-                    best_state_dict = model.state_dict()
-                    torch.save(best_state_dict, "low_pretrained_regression_10.pkl")
-                print(f"Epoch: [{epoch}], MSE: {mse}")
-        print(f"Seed: {seed}, Best MSE: {best_mse}")
+            Xs = torch.cat(Xs, 0).cpu()
+            Ys = torch.cat(Ys, 0).cpu()
+            mse = F.mse_loss(Xs.view(-1), Ys.view(-1))
+            pearson = pearsonr(Xs, Ys)[0]
+            wandb.log({"pearson": pearson, "test_loss": mse})
+            if best_mse > mse:
+                best_mse = mse
+                best_state_dict = model.state_dict()
+                torch.save(best_state_dict, f"{args.output}.pkl")
+            print(f"Epoch: [{epoch}], MSE: {mse}")
+    print(f"Seed: {seed}, Best MSE: {best_mse}")

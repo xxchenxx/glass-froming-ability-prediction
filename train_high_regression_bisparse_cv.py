@@ -56,7 +56,7 @@ class Model(nn.Module):
         else:
             return self.fc(out), self.new_fc(out)
 
-for seed in range(1):
+for seed in range(10):
     set_seed(seed)
     model = Model()
     model = model.cuda()
@@ -164,7 +164,7 @@ for seed in range(1):
                     m.set_upper()
             model.train()
             # print(y)
-            out = model(x)
+            _, out = model(x, second=True)
             loss = F.mse_loss(out.view(-1), y.view(-1))
             loss.backward()
             grad_new_w = []
@@ -240,7 +240,7 @@ for seed in range(1):
             Ys = []
             for x, y in test_dataloader:
                 x = x.cuda()
-                out = model(x)
+                _, out = model(x, second=True)
                 Xs.append(out.cpu().view(-1))
                 Ys.append(y.view(-1,1))
             
@@ -251,5 +251,5 @@ for seed in range(1):
                 best_mse = mse
                 best_Xs = Xs
                 best_Ys = Ys
-                torch.save(model.state_dict(), 'model_weight.pkl')
+                torch.save({"state_dict": model.state_dict(), 'epsilon': model.conv1.epsilon}, f'model_weight_{seed}.pkl')
     print(best_mse)

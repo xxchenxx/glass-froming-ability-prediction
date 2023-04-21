@@ -23,8 +23,8 @@ def AT(x_array, temp):#atomic table representation
         xi=int(Z_row_column[index-1][1])#row num
         xj=int(Z_row_column[index-1][2])#col num
         X[0][xi-1][xj-1]=tx2_value[j]/100.0
-    print(X)
-    assert False
+
+
     # X_BMG=copy.deepcopy(X)
     # X_BMG[0][10][10]=1.0 #processing parameter
     print(temp)
